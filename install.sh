@@ -276,9 +276,9 @@ configure_claude_code() {
   claude mcp add \
     --transport http \
     -s "$scope" \
-    -H "X-API-Key: $api_key" \
     comfyui-cloud \
-    "$MCP_URL" 2>/dev/null
+    "$MCP_URL" \
+    -H "X-API-Key: $api_key" 2>/dev/null
 
   if [[ $? -eq 0 ]]; then
     success "Claude Code configured ${DIM}($scope scope)${RESET}"
