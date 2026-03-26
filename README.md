@@ -1,6 +1,6 @@
 # Comfy Cloud MCP
 
-Connect your AI agent to [ComfyUI Cloud](https://comfy.org) for image generation, model search, and workflow management — directly from Claude, Cursor, and other MCP-compatible clients.
+Connect your AI agent to [Comfy Cloud](https://cloud.comfy.org) for image generation, model search, and workflow management — directly from Claude, Cursor, and other MCP-compatible clients.
 
 ## Install
 
@@ -84,5 +84,5 @@ claude mcp add --transport http -s user \
 
 ## Links
 
-- [ComfyUI Cloud](https://comfy.org)
+- [Comfy Cloud](https://cloud.comfy.org)
 - [Comfy Cloud Platform](https://platform.comfy.org)
