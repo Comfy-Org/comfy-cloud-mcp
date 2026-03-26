@@ -1,7 +1,14 @@
-# Comfy Cloud MCP
+<div align="center">
 
-Connect your AI agent to [Comfy Cloud](https://cloud.comfy.org) for image generation, model search, and workflow management — directly from Claude, Cursor, and other MCP-compatible clients.
+<img src="assets/logo.svg" alt="ComfyUI Cloud" width="200"/>
 
+<h1>Comfy Cloud MCP</h1>
+
+Connect your AI agent to <a href="https://cloud.comfy.org">Comfy Cloud</a> for image generation, model search, and workflow management — directly from Claude, Cursor, and other MCP-compatible clients.
+
+</div>
+
+> [!NOTE]
 > **Research Preview** — This MCP server is currently in limited early access. Interested? [Sign up for the waitlist](https://form.typeform.com/to/hHmvw1UH).
 
 ## Install
