@@ -46,7 +46,7 @@ Once installed, your AI agent can:
 
 ## Slash commands
 
-The installer can add these slash commands to Claude Code:
+The MCP tools work automatically — just ask your agent to generate an image or search for models. These optional slash commands provide shortcuts with extra context for Claude Code:
 
 | Command | Description |
 |---------|-------------|
