@@ -2,6 +2,8 @@
 
 Connect your AI agent to [Comfy Cloud](https://cloud.comfy.org) for image generation, model search, and workflow management — directly from Claude, Cursor, and other MCP-compatible clients.
 
+> **Research Preview** — This MCP server is currently in limited early access. Interested? [Sign up for the waitlist](https://form.typeform.com/to/hHmvw1UH).
+
 ## Install
 
 **macOS / Linux:**
