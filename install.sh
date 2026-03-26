@@ -5,7 +5,9 @@ set -euo pipefail
 # Usage: curl -fsSL https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main/install.sh | bash
 
 MCP_URL="${MCP_URL:-https://cloud.comfy.org/mcp}"
-VALIDATION_URL="${VALIDATION_URL:-https://cloud.comfy.org/api/queue}"
+# Derive validation URL from MCP_URL base (strip /mcp path, add /api/queue)
+MCP_BASE="${MCP_URL%/mcp}"
+VALIDATION_URL="${VALIDATION_URL:-${MCP_BASE}/api/queue}"
 SKILLS_BASE_URL="https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main/skills"
 REPO_URL="https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main"
 
@@ -71,15 +73,23 @@ get_claude_desktop_config_path() {
   esac
 }
 
+detect_cursor() {
+  [[ -d "$HOME/.cursor" ]]
+}
+
+get_cursor_config_path() {
+  echo "$HOME/.cursor/mcp.json"
+}
+
+detect_amp() {
+  command -v amp &>/dev/null
+}
+
 # ── API key handling ────────────────────────────────────────────────────
 read_api_key() {
   local key=""
   echo -en "  Paste your API key: " >&2
-  # Read with masking
-  stty -echo 2>/dev/null || true
-  read -r key
-  stty echo 2>/dev/null || true
-  echo "" >&2
+  read -r key < /dev/tty
   echo "$key"
 }
 
@@ -188,6 +198,72 @@ with open(config_path, 'w') as f:
   fi
 }
 
+# ── Configure Cursor (JSON file) ───────────────────────────────────────
+configure_cursor() {
+  local api_key="$1"
+  local config_path
+  config_path=$(get_cursor_config_path)
+
+  mkdir -p "$(dirname "$config_path")"
+
+  python3 -c "
+import json, os
+
+config_path = '$config_path'
+api_key = '$api_key'
+mcp_url = '$MCP_URL'
+
+config = {}
+if os.path.exists(config_path):
+    with open(config_path) as f:
+        config = json.load(f)
+
+if 'mcpServers' not in config:
+    config['mcpServers'] = {}
+
+config['mcpServers']['comfyui-cloud'] = {
+    'type': 'url',
+    'url': mcp_url,
+    'headers': {
+        'X-API-Key': api_key
+    }
+}
+
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=2)
+    f.write('\n')
+" 2>/dev/null
+
+  if [[ $? -eq 0 ]]; then
+    success "Cursor configured ${DIM}($config_path)${RESET}"
+    return 0
+  else
+    fail "Cursor: could not write config"
+    return 1
+  fi
+}
+
+# ── Configure Amp (CLI) ───────────────────────────────────────────────
+configure_amp() {
+  local api_key="$1"
+
+  amp mcp remove comfyui-cloud 2>/dev/null || true
+
+  amp mcp add \
+    --env "COMFY_API_KEY=$api_key" \
+    comfyui-cloud \
+    -- npx tsx "$MCP_URL" 2>/dev/null
+
+  # Amp doesn't support HTTP transport yet — fall back to noting it
+  if [[ $? -eq 0 ]]; then
+    success "Amp configured"
+    return 0
+  else
+    warn "Amp: HTTP transport may not be supported yet. Configure manually."
+    return 1
+  fi
+}
+
 # ── Configure Claude Code (CLI) ────────────────────────────────────────
 configure_claude_code() {
   local api_key="$1"
@@ -250,6 +326,8 @@ main() {
   # Detect available clients
   local has_claude_code=false
   local has_claude_desktop=false
+  local has_cursor=false
+  local has_amp=false
 
   heading "Detecting Clients"
   echo ""
@@ -268,12 +346,27 @@ main() {
     info "Claude Desktop (not found)"
   fi
 
-  if ! $has_claude_code && ! $has_claude_desktop; then
+  if detect_cursor; then
+    has_cursor=true
+    success "Cursor"
+  else
+    info "Cursor (not found)"
+  fi
+
+  if detect_amp; then
+    has_amp=true
+    success "Amp"
+  else
+    info "Amp (not found)"
+  fi
+
+  if ! $has_claude_code && ! $has_claude_desktop && ! $has_cursor && ! $has_amp; then
     echo ""
     fail "No supported MCP clients found."
     echo ""
-    info "Install Claude Code:   https://docs.anthropic.com/en/docs/claude-code"
+    info "Install Claude Code:    https://docs.anthropic.com/en/docs/claude-code"
     info "Install Claude Desktop: https://claude.ai/download"
+    info "Install Cursor:         https://cursor.com"
     echo ""
     exit 1
   fi
@@ -285,7 +378,7 @@ main() {
     warn "comfyui-cloud is already configured."
     echo ""
     echo -en "  Reinstall? (y/N): "
-    read -r reinstall
+    read -r reinstall < /dev/tty
     if [[ "${reinstall,,}" != "y" ]]; then
       info "Exiting."
       exit 0
@@ -320,7 +413,7 @@ main() {
     if [[ "$api_key" != comfyui-* ]]; then
       warn "Key doesn't start with \"comfyui-\". Are you sure it's correct?"
       echo -en "  Continue anyway? (y/N): "
-      read -r cont
+      read -r cont < /dev/tty
       if [[ "${cont,,}" != "y" ]]; then
         if [[ $attempt -lt $max_attempts ]]; then
           echo ""
@@ -358,7 +451,7 @@ main() {
     echo -e "    ${COMFY_YELLOW}1${RESET}) All projects (user scope)"
     echo -e "    ${DIM}2${RESET}) This project only (local scope)"
     echo -en "  Choice [1]: "
-    read -r scope_choice
+    read -r scope_choice < /dev/tty
     local scope="user"
     [[ "$scope_choice" == "2" ]] && scope="local"
     configure_claude_code "$api_key" "$scope"
@@ -368,12 +461,24 @@ main() {
     configure_claude_desktop "$api_key"
   fi
 
+  if $has_cursor; then
+    configure_cursor "$api_key"
+  fi
+
+  if $has_amp; then
+    configure_amp "$api_key"
+  fi
+
   # Slash commands
   local skills_installed=false
   local skill_dirs=()
 
   if $has_claude_code; then
     skill_dirs+=("$HOME/.claude/commands:Claude Code")
+  fi
+
+  if $has_cursor; then
+    skill_dirs+=("$HOME/.cursor/commands:Cursor")
   fi
 
   if [[ ${#skill_dirs[@]} -gt 0 ]]; then
@@ -390,7 +495,7 @@ main() {
     echo -e "    ${COMFY_YELLOW}/comfy-help${RESET}           ${DIM}— See what you can do${RESET}"
     echo ""
     echo -en "  Install slash commands? (Y/n): "
-    read -r install_skills_choice
+    read -r install_skills_choice < /dev/tty
 
     if [[ "${install_skills_choice,,}" != "n" ]]; then
       skills_installed=true
