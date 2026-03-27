@@ -379,7 +379,7 @@ main() {
     echo ""
     echo -en "  Reinstall? (y/N): "
     read -r reinstall < /dev/tty
-    if [[ "${reinstall,,}" != "y" ]]; then
+    if [[ "$(echo "$reinstall" | tr '[:upper:]' '[:lower:]')" != "y" ]]; then
       info "Exiting."
       exit 0
     fi
@@ -414,7 +414,7 @@ main() {
       warn "Key doesn't start with \"comfyui-\". Are you sure it's correct?"
       echo -en "  Continue anyway? (y/N): "
       read -r cont < /dev/tty
-      if [[ "${cont,,}" != "y" ]]; then
+      if [[ "$(echo "$cont" | tr '[:upper:]' '[:lower:]')" != "y" ]]; then
         if [[ $attempt -lt $max_attempts ]]; then
           echo ""
           continue
@@ -497,7 +497,7 @@ main() {
     echo -en "  Install slash commands? (Y/n): "
     read -r install_skills_choice < /dev/tty
 
-    if [[ "${install_skills_choice,,}" != "n" ]]; then
+    if [[ "$(echo "$install_skills_choice" | tr '[:upper:]' '[:lower:]')" != "n" ]]; then
       skills_installed=true
       for entry in "${skill_dirs[@]}"; do
         IFS=: read -r dir name <<< "$entry"
