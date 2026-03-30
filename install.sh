@@ -365,8 +365,10 @@ main() {
 
   # Check for existing installation
   echo ""
+  echo -en "  ${DIM}Checking for existing installation...${RESET}"
   local existing_key=""
   if existing_key=$(check_existing); then
+    echo -e "\r\033[K"
     warn "comfyui-cloud is already configured."
     echo ""
     echo -en "  Reinstall? (y/N): "
@@ -375,6 +377,8 @@ main() {
       info "Exiting."
       exit 0
     fi
+  else
+    echo -e "\r\033[K"
   fi
 
   # Get API key
