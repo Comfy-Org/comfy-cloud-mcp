@@ -285,7 +285,7 @@ install_skills() {
   local count=0
   for skill in "${skills[@]}"; do
     if curl -fsSL "$SKILLS_BASE_URL/$skill" -o "$target_dir/$skill" 2>/dev/null; then
-      ((count++))
+      count=$((count + 1))
     fi
   done
 
