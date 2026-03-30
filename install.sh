@@ -93,13 +93,28 @@ read_api_key() {
   echo "$key"
 }
 
+VALIDATION_ERROR=""
+
 validate_api_key() {
   local key="$1"
+  VALIDATION_ERROR=""
+  local tmpfile
+  tmpfile=$(mktemp)
   local status
-  status=$(curl -s -o /dev/null -w "%{http_code}" -H "X-API-Key: $key" "$VALIDATION_URL" 2>/dev/null) || true
+  status=$(curl -s -o "$tmpfile" -w "%{http_code}" -H "X-API-Key: $key" "$VALIDATION_URL" 2>/dev/null) || true
   if [[ "$status" == "401" || "$status" == "403" ]]; then
+    # Try to extract the error message from the response body
+    VALIDATION_ERROR=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$tmpfile'))
+    print(d.get('message', ''))
+except: pass
+" 2>/dev/null) || true
+    rm -f "$tmpfile"
     return 1
   fi
+  rm -f "$tmpfile"
   return 0
 }
 
@@ -146,56 +161,18 @@ except: pass
   return 1
 }
 
-# ── Configure Claude Desktop (JSON file) ───────────────────────────────
+# ── Configure Claude Desktop ──────────────────────────────────────────
 configure_claude_desktop() {
   local api_key="$1"
-  local config_path
-  config_path=$(get_claude_desktop_config_path)
 
-  if [[ -z "$config_path" ]]; then
-    fail "Claude Desktop: unsupported OS"
-    return 1
-  fi
-
-  # Ensure directory exists
-  mkdir -p "$(dirname "$config_path")"
-
-  # Use python3 to safely merge JSON
-  python3 -c "
-import json, os
-
-config_path = '$config_path'
-api_key = '$api_key'
-mcp_url = '$MCP_URL'
-
-config = {}
-if os.path.exists(config_path):
-    with open(config_path) as f:
-        config = json.load(f)
-
-if 'mcpServers' not in config:
-    config['mcpServers'] = {}
-
-config['mcpServers']['comfyui-cloud'] = {
-    'type': 'url',
-    'url': mcp_url,
-    'headers': {
-        'X-API-Key': api_key
-    }
-}
-
-with open(config_path, 'w') as f:
-    json.dump(config, f, indent=2)
-    f.write('\n')
-" 2>/dev/null
-
-  if [[ $? -eq 0 ]]; then
-    success "Claude Desktop configured ${DIM}($config_path)${RESET}"
-    return 0
-  else
-    fail "Claude Desktop: could not write config"
-    return 1
-  fi
+  # Claude Desktop chat mode requires OAuth for remote MCP servers via
+  # Settings > Connectors. OAuth support is coming soon. For now, users
+  # can use Code mode within the Desktop app (configured via Claude Code).
+  echo ""
+  warn "Claude Desktop (chat mode): OAuth support coming soon."
+  echo -e "  ${DIM}In the meantime, use ${BOLD}Code mode${RESET}${DIM} within Claude Desktop —${RESET}"
+  echo -e "  ${DIM}it connects to Comfy Cloud automatically via the Claude Code config.${RESET}"
+  echo ""
 }
 
 # ── Configure Cursor (JSON file) ───────────────────────────────────────
@@ -250,16 +227,16 @@ configure_amp() {
   amp mcp remove comfyui-cloud 2>/dev/null || true
 
   amp mcp add \
-    --env "COMFY_API_KEY=$api_key" \
+    --transport http \
     comfyui-cloud \
-    -- npx tsx "$MCP_URL" 2>/dev/null
+    "$MCP_URL" \
+    -H "X-API-Key: $api_key" 2>/dev/null
 
-  # Amp doesn't support HTTP transport yet — fall back to noting it
   if [[ $? -eq 0 ]]; then
     success "Amp configured"
     return 0
   else
-    warn "Amp: HTTP transport may not be supported yet. Configure manually."
+    warn "Amp: could not configure automatically. You may need to set it up manually."
     return 1
   fi
 }
@@ -371,6 +348,21 @@ main() {
     exit 1
   fi
 
+  # Claude Desktop chat mode doesn't support API key auth yet (OAuth coming soon).
+  # If it's the only client, let the user know they need Claude Code.
+  if ! $has_claude_code && ! $has_cursor && ! $has_amp && $has_claude_desktop; then
+    echo ""
+    warn "Claude Desktop chat mode requires OAuth (coming soon)."
+    echo ""
+    echo -e "  Install ${BOLD}Claude Code${RESET} to use Comfy Cloud MCP today:"
+    echo -e "  ${CYAN}https://docs.anthropic.com/en/docs/claude-code${RESET}"
+    echo ""
+    echo -e "  ${DIM}Claude Code works as a standalone CLI and inside the Claude Desktop app.${RESET}"
+    echo -e "  ${DIM}Also supported: Cursor, Amp.${RESET}"
+    echo ""
+    exit 0
+  fi
+
   # Check for existing installation
   echo ""
   local existing_key=""
@@ -429,12 +421,16 @@ main() {
       break
     else
       local remaining=$((max_attempts - attempt))
+      local err_msg="Invalid or unauthorized API key."
+      if [[ -n "$VALIDATION_ERROR" ]]; then
+        err_msg="$VALIDATION_ERROR"
+      fi
       if [[ $remaining -gt 0 ]]; then
-        fail "Invalid or unauthorized API key. $remaining attempt(s) remaining."
+        fail "$err_msg $remaining attempt(s) remaining."
         echo ""
         continue
       fi
-      fail "Invalid or unauthorized API key."
+      fail "$err_msg"
       echo -e "  Check your key at ${CYAN}https://platform.comfy.org/profile/api-keys${RESET}"
       exit 1
     fi
@@ -457,9 +453,8 @@ main() {
     configure_claude_code "$api_key" "$scope"
   fi
 
-  if $has_claude_desktop; then
-    configure_claude_desktop "$api_key"
-  fi
+  # Claude Desktop chat mode skipped (OAuth required, coming soon).
+  # Code mode within Desktop uses the Claude Code config above.
 
   if $has_cursor; then
     configure_cursor "$api_key"
@@ -473,7 +468,9 @@ main() {
   local skills_installed=false
   local skill_dirs=()
 
-  if $has_claude_code; then
+  # Install slash commands for Claude Code CLI, or for Claude Desktop (which
+  # includes Code mode that reads from ~/.claude/commands/)
+  if $has_claude_code || $has_claude_desktop; then
     skill_dirs+=("$HOME/.claude/commands:Claude Code")
   fi
 
