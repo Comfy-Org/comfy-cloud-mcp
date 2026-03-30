@@ -365,7 +365,7 @@ main() {
 
   # Check for existing installation
   echo ""
-  echo -en "  ${DIM}Checking for existing installation...${RESET}"
+  echo -en "  ${DIM}Checking for existing config...${RESET}"
   local existing_key=""
   if existing_key=$(check_existing); then
     echo -e "\r\033[K"
@@ -457,8 +457,9 @@ main() {
     configure_claude_code "$api_key" "$scope" || true
   fi
 
-  # Claude Desktop chat mode skipped (OAuth required, coming soon).
-  # Code mode within Desktop uses the Claude Code config above.
+  if $has_claude_desktop; then
+    info "Claude Desktop (chat mode): OAuth support coming soon. Use Code mode for now."
+  fi
 
   if $has_cursor; then
     configure_cursor "$api_key" || true
