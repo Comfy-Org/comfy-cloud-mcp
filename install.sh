@@ -224,13 +224,13 @@ with open(config_path, 'w') as f:
 configure_amp() {
   local api_key="$1"
 
-  amp mcp remove comfyui-cloud 2>/dev/null || true
+  amp mcp remove comfyui-cloud &>/dev/null || true
 
   amp mcp add \
     --transport http \
     comfyui-cloud \
     "$MCP_URL" \
-    -H "X-API-Key: $api_key" 2>/dev/null
+    -H "X-API-Key: $api_key" &>/dev/null
 
   if [[ $? -eq 0 ]]; then
     success "Amp configured"
@@ -247,15 +247,15 @@ configure_claude_code() {
   local scope="$2"
 
   # Remove existing from both scopes to avoid shadowing
-  claude mcp remove comfyui-cloud -s user 2>/dev/null || true
-  claude mcp remove comfyui-cloud -s local 2>/dev/null || true
+  claude mcp remove comfyui-cloud -s user &>/dev/null || true
+  claude mcp remove comfyui-cloud -s local &>/dev/null || true
 
   claude mcp add \
     --transport http \
     -s "$scope" \
     comfyui-cloud \
     "$MCP_URL" \
-    -H "X-API-Key: $api_key" 2>/dev/null
+    -H "X-API-Key: $api_key" &>/dev/null
 
   if [[ $? -eq 0 ]]; then
     success "Claude Code configured ${DIM}($scope scope)${RESET}"
