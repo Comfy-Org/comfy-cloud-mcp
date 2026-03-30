@@ -349,15 +349,16 @@ main() {
   fi
 
   # Claude Desktop chat mode doesn't support API key auth yet (OAuth coming soon).
-  # If it's the only client, let the user know they need Claude Code or Cursor.
+  # If it's the only client, let the user know they need Claude Code.
   if ! $has_claude_code && ! $has_cursor && ! $has_amp && $has_claude_desktop; then
     echo ""
-    warn "Claude Desktop (chat mode) requires OAuth, which is coming soon."
-    echo -e "  ${DIM}To use Comfy Cloud MCP today, install one of:${RESET}"
+    warn "Claude Desktop chat mode requires OAuth (coming soon)."
     echo ""
-    echo -e "    ${CYAN}Claude Code${RESET}  ${DIM}— https://docs.anthropic.com/en/docs/claude-code${RESET}"
-    echo -e "                ${DIM}(also works in Code mode within Claude Desktop)${RESET}"
-    echo -e "    ${CYAN}Cursor${RESET}       ${DIM}— https://cursor.com${RESET}"
+    echo -e "  Install ${BOLD}Claude Code${RESET} to use Comfy Cloud MCP today:"
+    echo -e "  ${CYAN}https://docs.anthropic.com/en/docs/claude-code${RESET}"
+    echo ""
+    echo -e "  ${DIM}Claude Code works as a standalone CLI and inside the Claude Desktop app.${RESET}"
+    echo -e "  ${DIM}Also supported: Cursor, Amp.${RESET}"
     echo ""
     exit 0
   fi
