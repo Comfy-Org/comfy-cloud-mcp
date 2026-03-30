@@ -26,12 +26,14 @@ irm https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main/install.ps1
 ```
 
 The installer will:
-1. Detect your MCP clients (Claude Code, Claude Desktop)
+1. Detect your MCP clients (Claude Code, Cursor, Amp)
 2. Ask for your [Comfy Cloud API key](https://platform.comfy.org/profile/api-keys)
 3. Configure the remote MCP server
 4. Optionally install slash commands for better workflow context
 
 No Node.js or other dependencies required.
+
+> **Claude Desktop (chat mode):** Requires OAuth, which is coming soon. In the meantime, use **Code mode** within the Claude Desktop app — it connects to Comfy Cloud automatically via the Claude Code config.
 
 ## What you can do
 
@@ -69,7 +71,7 @@ claude mcp add --transport http -s user \
   https://cloud.comfy.org/mcp
 ```
 
-**Claude Desktop** (`claude_desktop_config.json`):
+**Cursor** (`~/.cursor/mcp.json`):
 
 ```json
 {
