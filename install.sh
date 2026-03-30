@@ -450,18 +450,18 @@ main() {
     read -r scope_choice < /dev/tty
     local scope="user"
     [[ "$scope_choice" == "2" ]] && scope="local"
-    configure_claude_code "$api_key" "$scope"
+    configure_claude_code "$api_key" "$scope" || true
   fi
 
   # Claude Desktop chat mode skipped (OAuth required, coming soon).
   # Code mode within Desktop uses the Claude Code config above.
 
   if $has_cursor; then
-    configure_cursor "$api_key"
+    configure_cursor "$api_key" || true
   fi
 
   if $has_amp; then
-    configure_amp "$api_key"
+    configure_amp "$api_key" || true
   fi
 
   # Slash commands
