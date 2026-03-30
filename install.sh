@@ -161,27 +161,18 @@ except: pass
   return 1
 }
 
-# ── Configure Claude Desktop (Connectors UI) ─────────────────────────
+# ── Configure Claude Desktop ──────────────────────────────────────────
 configure_claude_desktop() {
   local api_key="$1"
 
-  # Claude Desktop only supports remote MCP servers via Settings > Connectors,
-  # not via claude_desktop_config.json. Guide the user through the UI steps.
+  # Claude Desktop chat mode requires OAuth for remote MCP servers via
+  # Settings > Connectors. OAuth support is coming soon. For now, users
+  # can use Code mode within the Desktop app (configured via Claude Code).
   echo ""
-  echo -e "  ${BOLD}Claude Desktop Setup${RESET}"
+  warn "Claude Desktop (chat mode): OAuth support coming soon."
+  echo -e "  ${DIM}In the meantime, use ${BOLD}Code mode${RESET}${DIM} within Claude Desktop —${RESET}"
+  echo -e "  ${DIM}it connects to Comfy Cloud automatically via the Claude Code config.${RESET}"
   echo ""
-  echo -e "  Claude Desktop requires adding the MCP server via the Connectors UI:"
-  echo ""
-  echo -e "    1. Open Claude Desktop"
-  echo -e "    2. Go to ${CYAN}Settings > Connectors${RESET}"
-  echo -e "    3. Click ${COMFY_YELLOW}\"Add custom connector\"${RESET} at the bottom"
-  echo -e "    4. Paste this URL:"
-  echo ""
-  echo -e "       ${CYAN}${MCP_URL}${RESET}"
-  echo ""
-  echo -e "    5. Click ${COMFY_YELLOW}\"Add\"${RESET} to finish"
-  echo ""
-  success "Claude Desktop instructions shown"
 }
 
 # ── Configure Cursor (JSON file) ───────────────────────────────────────
