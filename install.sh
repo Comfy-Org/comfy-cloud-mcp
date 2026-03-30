@@ -161,55 +161,27 @@ except: pass
   return 1
 }
 
-# ── Configure Claude Desktop (JSON file) ───────────────────────────────
+# ── Configure Claude Desktop (Connectors UI) ─────────────────────────
 configure_claude_desktop() {
   local api_key="$1"
-  local config_path
-  config_path=$(get_claude_desktop_config_path)
 
-  if [[ -z "$config_path" ]]; then
-    fail "Claude Desktop: unsupported OS"
-    return 1
-  fi
-
-  # Ensure directory exists
-  mkdir -p "$(dirname "$config_path")"
-
-  # Use python3 to safely merge JSON — stdio transport (Claude Desktop only supports stdio)
-  python3 -c "
-import json, os
-
-config_path = '$config_path'
-api_key = '$api_key'
-
-config = {}
-if os.path.exists(config_path):
-    with open(config_path) as f:
-        config = json.load(f)
-
-if 'mcpServers' not in config:
-    config['mcpServers'] = {}
-
-config['mcpServers']['comfyui-cloud'] = {
-    'command': 'npx',
-    'args': ['-y', 'github:Comfy-Org/comfy-cloud-mcp-server'],
-    'env': {
-        'COMFY_API_KEY': api_key
-    }
-}
-
-with open(config_path, 'w') as f:
-    json.dump(config, f, indent=2)
-    f.write('\n')
-" 2>/dev/null
-
-  if [[ $? -eq 0 ]]; then
-    success "Claude Desktop configured ${DIM}($config_path)${RESET}"
-    return 0
-  else
-    fail "Claude Desktop: could not write config"
-    return 1
-  fi
+  # Claude Desktop only supports remote MCP servers via Settings > Connectors,
+  # not via claude_desktop_config.json. Guide the user through the UI steps.
+  echo ""
+  echo -e "  ${BOLD}Claude Desktop Setup${RESET}"
+  echo ""
+  echo -e "  Claude Desktop requires adding the MCP server via the Connectors UI:"
+  echo ""
+  echo -e "    1. Open Claude Desktop"
+  echo -e "    2. Go to ${CYAN}Settings > Connectors${RESET}"
+  echo -e "    3. Click ${COMFY_YELLOW}\"Add custom connector\"${RESET} at the bottom"
+  echo -e "    4. Paste this URL:"
+  echo ""
+  echo -e "       ${CYAN}${MCP_URL}${RESET}"
+  echo ""
+  echo -e "    5. Click ${COMFY_YELLOW}\"Add\"${RESET} to finish"
+  echo ""
+  success "Claude Desktop instructions shown"
 }
 
 # ── Configure Cursor (JSON file) ───────────────────────────────────────
@@ -220,12 +192,12 @@ configure_cursor() {
 
   mkdir -p "$(dirname "$config_path")"
 
-  # stdio transport for Cursor
   python3 -c "
 import json, os
 
 config_path = '$config_path'
 api_key = '$api_key'
+mcp_url = '$MCP_URL'
 
 config = {}
 if os.path.exists(config_path):
@@ -236,10 +208,10 @@ if 'mcpServers' not in config:
     config['mcpServers'] = {}
 
 config['mcpServers']['comfyui-cloud'] = {
-    'command': 'npx',
-    'args': ['-y', 'github:Comfy-Org/comfy-cloud-mcp-server'],
-    'env': {
-        'COMFY_API_KEY': api_key
+    'type': 'url',
+    'url': mcp_url,
+    'headers': {
+        'X-API-Key': api_key
     }
 }
 
@@ -264,15 +236,16 @@ configure_amp() {
   amp mcp remove comfyui-cloud 2>/dev/null || true
 
   amp mcp add \
-    --env "COMFY_API_KEY=$api_key" \
+    --transport http \
     comfyui-cloud \
-    -- npx -y github:Comfy-Org/comfy-cloud-mcp-server 2>/dev/null
+    "$MCP_URL" \
+    -H "X-API-Key: $api_key" 2>/dev/null
 
   if [[ $? -eq 0 ]]; then
     success "Amp configured"
     return 0
   else
-    warn "Amp: could not configure. You may need to set it up manually."
+    warn "Amp: could not configure automatically. You may need to set it up manually."
     return 1
   fi
 }
@@ -287,10 +260,11 @@ configure_claude_code() {
   claude mcp remove comfyui-cloud -s local 2>/dev/null || true
 
   claude mcp add \
+    --transport http \
     -s "$scope" \
-    -e "COMFY_API_KEY=$api_key" \
     comfyui-cloud \
-    -- npx -y github:Comfy-Org/comfy-cloud-mcp-server 2>/dev/null
+    "$MCP_URL" \
+    -H "X-API-Key: $api_key" 2>/dev/null
 
   if [[ $? -eq 0 ]]; then
     success "Claude Code configured ${DIM}($scope scope)${RESET}"
@@ -334,18 +308,6 @@ install_skills() {
 # ── Main ────────────────────────────────────────────────────────────────
 main() {
   print_banner
-
-  # Check for Node.js (required for npx to run the MCP server)
-  if ! command -v npx &>/dev/null; then
-    fail "Node.js is required but not installed."
-    echo ""
-    echo -e "  Install Node.js from: ${CYAN}https://nodejs.org${RESET}"
-    echo -e "  Or via a package manager:"
-    echo -e "    ${DIM}brew install node${RESET}       (macOS)"
-    echo -e "    ${DIM}sudo apt install nodejs${RESET} (Ubuntu/Debian)"
-    echo ""
-    exit 1
-  fi
 
   # Detect available clients
   local has_claude_code=false
