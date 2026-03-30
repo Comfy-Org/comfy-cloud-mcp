@@ -93,13 +93,28 @@ read_api_key() {
   echo "$key"
 }
 
+VALIDATION_ERROR=""
+
 validate_api_key() {
   local key="$1"
+  VALIDATION_ERROR=""
+  local tmpfile
+  tmpfile=$(mktemp)
   local status
-  status=$(curl -s -o /dev/null -w "%{http_code}" -H "X-API-Key: $key" "$VALIDATION_URL" 2>/dev/null) || true
+  status=$(curl -s -o "$tmpfile" -w "%{http_code}" -H "X-API-Key: $key" "$VALIDATION_URL" 2>/dev/null) || true
   if [[ "$status" == "401" || "$status" == "403" ]]; then
+    # Try to extract the error message from the response body
+    VALIDATION_ERROR=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$tmpfile'))
+    print(d.get('message', ''))
+except: pass
+" 2>/dev/null) || true
+    rm -f "$tmpfile"
     return 1
   fi
+  rm -f "$tmpfile"
   return 0
 }
 
@@ -160,13 +175,12 @@ configure_claude_desktop() {
   # Ensure directory exists
   mkdir -p "$(dirname "$config_path")"
 
-  # Use python3 to safely merge JSON
+  # Use python3 to safely merge JSON — stdio transport (Claude Desktop only supports stdio)
   python3 -c "
 import json, os
 
 config_path = '$config_path'
 api_key = '$api_key'
-mcp_url = '$MCP_URL'
 
 config = {}
 if os.path.exists(config_path):
@@ -177,10 +191,10 @@ if 'mcpServers' not in config:
     config['mcpServers'] = {}
 
 config['mcpServers']['comfyui-cloud'] = {
-    'type': 'url',
-    'url': mcp_url,
-    'headers': {
-        'X-API-Key': api_key
+    'command': 'npx',
+    'args': ['-y', 'github:Comfy-Org/comfy-cloud-mcp-server'],
+    'env': {
+        'COMFY_API_KEY': api_key
     }
 }
 
@@ -206,12 +220,12 @@ configure_cursor() {
 
   mkdir -p "$(dirname "$config_path")"
 
+  # stdio transport for Cursor
   python3 -c "
 import json, os
 
 config_path = '$config_path'
 api_key = '$api_key'
-mcp_url = '$MCP_URL'
 
 config = {}
 if os.path.exists(config_path):
@@ -222,10 +236,10 @@ if 'mcpServers' not in config:
     config['mcpServers'] = {}
 
 config['mcpServers']['comfyui-cloud'] = {
-    'type': 'url',
-    'url': mcp_url,
-    'headers': {
-        'X-API-Key': api_key
+    'command': 'npx',
+    'args': ['-y', 'github:Comfy-Org/comfy-cloud-mcp-server'],
+    'env': {
+        'COMFY_API_KEY': api_key
     }
 }
 
@@ -252,14 +266,13 @@ configure_amp() {
   amp mcp add \
     --env "COMFY_API_KEY=$api_key" \
     comfyui-cloud \
-    -- npx tsx "$MCP_URL" 2>/dev/null
+    -- npx -y github:Comfy-Org/comfy-cloud-mcp-server 2>/dev/null
 
-  # Amp doesn't support HTTP transport yet — fall back to noting it
   if [[ $? -eq 0 ]]; then
     success "Amp configured"
     return 0
   else
-    warn "Amp: HTTP transport may not be supported yet. Configure manually."
+    warn "Amp: could not configure. You may need to set it up manually."
     return 1
   fi
 }
@@ -274,11 +287,10 @@ configure_claude_code() {
   claude mcp remove comfyui-cloud -s local 2>/dev/null || true
 
   claude mcp add \
-    --transport http \
     -s "$scope" \
+    -e "COMFY_API_KEY=$api_key" \
     comfyui-cloud \
-    "$MCP_URL" \
-    -H "X-API-Key: $api_key" 2>/dev/null
+    -- npx -y github:Comfy-Org/comfy-cloud-mcp-server 2>/dev/null
 
   if [[ $? -eq 0 ]]; then
     success "Claude Code configured ${DIM}($scope scope)${RESET}"
@@ -322,6 +334,18 @@ install_skills() {
 # ── Main ────────────────────────────────────────────────────────────────
 main() {
   print_banner
+
+  # Check for Node.js (required for npx to run the MCP server)
+  if ! command -v npx &>/dev/null; then
+    fail "Node.js is required but not installed."
+    echo ""
+    echo -e "  Install Node.js from: ${CYAN}https://nodejs.org${RESET}"
+    echo -e "  Or via a package manager:"
+    echo -e "    ${DIM}brew install node${RESET}       (macOS)"
+    echo -e "    ${DIM}sudo apt install nodejs${RESET} (Ubuntu/Debian)"
+    echo ""
+    exit 1
+  fi
 
   # Detect available clients
   local has_claude_code=false
@@ -429,12 +453,16 @@ main() {
       break
     else
       local remaining=$((max_attempts - attempt))
+      local err_msg="Invalid or unauthorized API key."
+      if [[ -n "$VALIDATION_ERROR" ]]; then
+        err_msg="$VALIDATION_ERROR"
+      fi
       if [[ $remaining -gt 0 ]]; then
-        fail "Invalid or unauthorized API key. $remaining attempt(s) remaining."
+        fail "$err_msg $remaining attempt(s) remaining."
         echo ""
         continue
       fi
-      fail "Invalid or unauthorized API key."
+      fail "$err_msg"
       echo -e "  Check your key at ${CYAN}https://platform.comfy.org/profile/api-keys${RESET}"
       exit 1
     fi
@@ -473,7 +501,9 @@ main() {
   local skills_installed=false
   local skill_dirs=()
 
-  if $has_claude_code; then
+  # Install slash commands for Claude Code CLI, or for Claude Desktop (which
+  # includes Code mode that reads from ~/.claude/commands/)
+  if $has_claude_code || $has_claude_desktop; then
     skill_dirs+=("$HOME/.claude/commands:Claude Code")
   fi
 
