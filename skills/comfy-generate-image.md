@@ -18,6 +18,6 @@ Follow these steps exactly:
 
 8. Display the image to the user:
    - In **GUI environments** (Claude Desktop): the response includes an `ARTIFACT_HTML:` block — create an HTML artifact using that exact HTML so the image appears in the side panel. The file is also saved to disk.
-   - In **CLI/terminal environments** (Claude Code, Cursor): the response includes a `curl` command to download the image. Run it to save the file locally, then open it with `open` (macOS), `xdg-open` (Linux), or `start` (Windows).
+   - In **CLI/terminal environments** (Claude Code, Cursor): the response includes a `curl` command with a short-lived signed GCS URL. Run the command exactly as returned — do not modify or strip any query parameters, as they are part of the URL signature and removing them will invalidate it. After downloading, open the file with `open` (macOS), `xdg-open` (Linux), or `start` (Windows).
 
 If any step fails, show the error clearly and suggest what might have gone wrong (wrong model, invalid node configuration, etc.).
