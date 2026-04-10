@@ -58,35 +58,6 @@ The MCP tools work automatically — just ask your agent to generate an image or
 | `/comfy-search-templates` | Find pre-built workflow templates |
 | `/comfy-help` | See what you can do with ComfyUI Cloud |
 
-## Manual setup
-
-If you prefer to configure manually:
-
-**Claude Code:**
-
-```bash
-claude mcp add --transport http -s user \
-  -H "X-API-Key: YOUR_API_KEY" \
-  comfyui-cloud \
-  https://cloud.comfy.org/mcp
-```
-
-**Cursor** (`~/.cursor/mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "comfyui-cloud": {
-      "type": "url",
-      "url": "https://cloud.comfy.org/mcp",
-      "headers": {
-        "X-API-Key": "YOUR_API_KEY"
-      }
-    }
-  }
-}
-```
-
 ## Get an API key
 
 1. Go to [platform.comfy.org/profile/api-keys](https://platform.comfy.org/profile/api-keys)
