@@ -220,23 +220,40 @@ with open(config_path, 'w') as f:
   fi
 }
 
-# ── Configure Amp (CLI) ───────────────────────────────────────────────
+# ── Configure Amp ──────────────────────────────────────────────────────
+# Amp's `mcp add` CLI auto-detects transport from the URL and has no flag
+# for HTTP headers — they live in settings.json under `amp.mcpServers`.
+# We write the entry directly so the X-API-Key header survives.
 configure_amp() {
   local api_key="$1"
+  local config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/amp"
+  local config_file="$config_dir/settings.json"
 
-  amp mcp remove comfyui-cloud &>/dev/null || true
+  if ! command -v jq &>/dev/null; then
+    warn "Amp: \`jq\` is required to write settings.json. Install jq and re-run, or set up manually."
+    return 1
+  fi
 
-  amp mcp add \
-    --transport http \
-    comfyui-cloud \
-    "$MCP_URL" \
-    -H "X-API-Key: $api_key" &>/dev/null
+  if ! mkdir -p "$config_dir" 2>/dev/null; then
+    warn "Amp: failed to create $config_dir"
+    return 1
+  fi
 
-  if [[ $? -eq 0 ]]; then
-    success "Amp configured"
+  if [[ ! -s "$config_file" ]]; then
+    echo '{}' >"$config_file"
+  fi
+
+  local jq_output
+  if jq_output=$(jq \
+    --arg url "$MCP_URL" \
+    --arg key "$api_key" \
+    '.["amp.mcpServers"]["comfyui-cloud"] = {url: $url, headers: {"X-API-Key": $key}}' \
+    "$config_file" 2>&1); then
+    printf '%s\n' "$jq_output" >"$config_file"
+    success "Amp configured ${DIM}($config_file)${RESET}"
     return 0
   else
-    warn "Amp: could not configure automatically. You may need to set it up manually."
+    warn "Amp: failed to update $config_file: $jq_output"
     return 1
   fi
 }

@@ -53,6 +53,16 @@ function Get-ClaudeDesktopConfigPath {
     return Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
 }
 
+function Test-Amp {
+    try { Get-Command amp -ErrorAction Stop | Out-Null; return $true }
+    catch { return $false }
+}
+
+function Get-AmpConfigPath {
+    if ($env:AMP_SETTINGS_FILE) { return $env:AMP_SETTINGS_FILE }
+    return Join-Path $env:APPDATA "amp\settings.json"
+}
+
 # ── API key handling ────────────────────────────────────────────────────
 function Read-ApiKey {
     Write-Host -NoNewline "  Paste your API key: "
@@ -129,6 +139,44 @@ function Install-ClaudeCode($apiKey, $scope) {
     }
 }
 
+# ── Configure Amp ──────────────────────────────────────────────────────
+# Amp's `mcp add` CLI auto-detects transport from the URL and has no flag
+# for HTTP headers — they live in settings.json under `amp.mcpServers`.
+# We write the entry directly so the X-API-Key header survives.
+function Install-Amp($apiKey) {
+    $configPath = Get-AmpConfigPath
+    $configDir = Split-Path $configPath
+
+    if (-not (Test-Path $configDir)) {
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    }
+
+    $config = @{}
+    if (Test-Path $configPath) {
+        try {
+            $loaded = Get-Content $configPath -Raw | ConvertFrom-Json -AsHashtable
+            if ($null -ne $loaded) { $config = $loaded }
+        } catch {
+            Write-Warn "Amp: existing settings.json is not valid JSON; leaving manual setup to user"
+            return
+        }
+    }
+
+    if (-not $config.ContainsKey("amp.mcpServers")) {
+        $config["amp.mcpServers"] = @{}
+    }
+
+    $config["amp.mcpServers"]["comfyui-cloud"] = @{
+        url = $MCP_URL
+        headers = @{
+            "X-API-Key" = $apiKey
+        }
+    }
+
+    $config | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
+    Write-Success "Amp configured $ESC[2m($configPath)$ESC[0m"
+}
+
 # ── Install slash commands ──────────────────────────────────────────────
 function Install-Skills($targetDir, $clientName) {
     $skills = @(
@@ -166,6 +214,7 @@ function Main {
 
     $hasClaudeCode = Test-ClaudeCode
     $hasClaudeDesktop = Test-ClaudeDesktop
+    $hasAmp = Test-Amp
 
     Write-Heading "Detecting Clients"
     Write-Host ""
@@ -176,12 +225,16 @@ function Main {
     if ($hasClaudeDesktop) { Write-Success "Claude Desktop" }
     else { Write-Info "Claude Desktop (not found)" }
 
-    if (-not $hasClaudeCode -and -not $hasClaudeDesktop) {
+    if ($hasAmp) { Write-Success "Amp" }
+    else { Write-Info "Amp (not found)" }
+
+    if (-not $hasClaudeCode -and -not $hasClaudeDesktop -and -not $hasAmp) {
         Write-Host ""
         Write-Fail "No supported MCP clients found."
         Write-Host ""
         Write-Info "Install Claude Code:    https://docs.anthropic.com/en/docs/claude-code"
         Write-Info "Install Claude Desktop: https://claude.ai/download"
+        Write-Info "Install Amp:            https://ampcode.com"
         Write-Host ""
         exit 1
     }
@@ -253,6 +306,10 @@ function Main {
 
     if ($hasClaudeDesktop) {
         Install-ClaudeDesktop $apiKey
+    }
+
+    if ($hasAmp) {
+        Install-Amp $apiKey
     }
 
     # Slash commands
