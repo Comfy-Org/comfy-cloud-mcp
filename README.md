@@ -10,7 +10,7 @@ Connect your AI agent to [Comfy Cloud](https://cloud.comfy.org) — generate ima
 
 > [!NOTE]
 > **Closed Beta — invite only.** Access is gated by a per-user feature flag.
-> If you don't have access yet, [sign up for the waitlist](https://form.typeform.com/to/hHmvw1UH?typeform-source=github.com).
+> If you don't have access yet, [sign up for the waitlist](https://form.typeform.com/to/hHmvw1UH).
 
 ## Install
 
