@@ -49,10 +49,6 @@ function Test-ClaudeDesktop {
     return (Test-Path $configDir)
 }
 
-function Get-ClaudeDesktopConfigPath {
-    return Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
-}
-
 function Test-Amp {
     try { Get-Command amp -ErrorAction Stop | Out-Null; return $true }
     catch { return $false }
@@ -94,46 +90,22 @@ function Test-ApiKey($key) {
     }
 }
 
-# ── Configure Claude Desktop ───────────────────────────────────────────
-function Install-ClaudeDesktop($apiKey) {
-    $configPath = Get-ClaudeDesktopConfigPath
-    $configDir = Split-Path $configPath
-
-    if (-not (Test-Path $configDir)) {
-        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
-    }
-
-    $config = @{}
-    if (Test-Path $configPath) {
-        $config = Get-Content $configPath -Raw | ConvertFrom-Json -AsHashtable
-    }
-
-    if (-not $config.ContainsKey("mcpServers")) {
-        $config["mcpServers"] = @{}
-    }
-
-    $config["mcpServers"]["comfyui-cloud"] = @{
-        type = "url"
-        url = $MCP_URL
-        headers = @{
-            "X-API-Key" = $apiKey
-        }
-    }
-
-    $config | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
-    Write-Success "Claude Desktop configured $ESC[2m($configPath)$ESC[0m"
-}
-
 # ── Configure Claude Code ──────────────────────────────────────────────
-function Install-ClaudeCode($apiKey, $scope) {
-    # Remove existing from both scopes
+# Claude Desktop has no config-file route to a remote OAuth connector — it's
+# added through the Connectors UI, which then runs the OAuth browser flow. We
+# print those steps in the "Finish Sign-In" section; there's nothing to write.
+function Install-ClaudeCode($scope) {
+    # Remove existing from both scopes. Also clears any stale X-API-Key header
+    # from a previous install — Claude Code treats a rejected header as a hard
+    # failure and won't fall back to OAuth, so OAuth means no header at all.
     & claude mcp remove comfyui-cloud -s user 2>$null
     & claude mcp remove comfyui-cloud -s local 2>$null
 
-    & claude mcp add --transport http -s $scope -H "X-API-Key: $apiKey" comfyui-cloud $MCP_URL 2>$null
+    # No -H header -> Claude Code runs the MCP OAuth flow on first connect.
+    & claude mcp add --transport http -s $scope comfyui-cloud $MCP_URL 2>$null
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Success "Claude Code configured $ESC[2m($scope scope)$ESC[0m"
+        Write-Success "Claude Code configured $ESC[2m($scope scope, OAuth)$ESC[0m"
     } else {
         Write-Fail "Claude Code: claude mcp add failed"
     }
@@ -239,54 +211,58 @@ function Main {
         exit 1
     }
 
-    # Get API key
-    Write-Host ""
-    Write-Heading "API Key"
-    Write-Host ""
-    Write-Host "  Get one at: $ESC[36mhttps://platform.comfy.org/profile/api-keys$ESC[0m"
-    Write-Host "  Click $ESC[38;2;240;255;83m`"New API Key`"$ESC[0m and copy it."
-    Write-Host ""
-
+    # API key is only needed for clients still on the header path (Amp).
+    # Claude Code and Claude Desktop use OAuth and need no key.
     $apiKey = ""
-    $maxAttempts = 3
+    if ($hasAmp) {
+        Write-Host ""
+        Write-Heading "API Key"
+        Write-Host ""
+        Write-Host "  $ESC[2mAmp doesn't support OAuth yet — it needs an API key.$ESC[0m"
+        Write-Host "  Get one at: $ESC[36mhttps://platform.comfy.org/profile/api-keys$ESC[0m"
+        Write-Host "  Click $ESC[38;2;240;255;83m`"New API Key`"$ESC[0m and copy it."
+        Write-Host ""
 
-    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-        $apiKey = Read-ApiKey
+        $maxAttempts = 3
 
-        if ([string]::IsNullOrWhiteSpace($apiKey)) {
-            $remaining = $maxAttempts - $attempt
-            if ($remaining -gt 0) {
-                Write-Warn "No key entered. $remaining attempt(s) remaining. (Ctrl+C to quit)"
-                Write-Host ""
-                continue
-            }
-            Write-Fail "No key entered."
-            exit 1
-        }
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            $apiKey = Read-ApiKey
 
-        if (-not $apiKey.StartsWith("comfyui-")) {
-            Write-Warn "Key doesn't start with `"comfyui-`". Are you sure it's correct?"
-            $cont = Read-Host "  Continue anyway? (y/N)"
-            if ($cont.ToLower() -ne "y") {
-                if ($attempt -lt $maxAttempts) { Write-Host ""; continue }
+            if ([string]::IsNullOrWhiteSpace($apiKey)) {
+                $remaining = $maxAttempts - $attempt
+                if ($remaining -gt 0) {
+                    Write-Warn "No key entered. $remaining attempt(s) remaining. (Ctrl+C to quit)"
+                    Write-Host ""
+                    continue
+                }
+                Write-Fail "No key entered."
                 exit 1
             }
-        }
 
-        Write-Host "  Validating key..."
-        if (Test-ApiKey $apiKey) {
-            Write-Success "API key is valid"
-            break
-        } else {
-            $remaining = $maxAttempts - $attempt
-            if ($remaining -gt 0) {
-                Write-Fail "Invalid or unauthorized API key. $remaining attempt(s) remaining."
-                Write-Host ""
-                continue
+            if (-not $apiKey.StartsWith("comfyui-")) {
+                Write-Warn "Key doesn't start with `"comfyui-`". Are you sure it's correct?"
+                $cont = Read-Host "  Continue anyway? (y/N)"
+                if ($cont.ToLower() -ne "y") {
+                    if ($attempt -lt $maxAttempts) { Write-Host ""; continue }
+                    exit 1
+                }
             }
-            Write-Fail "Invalid or unauthorized API key."
-            Write-Host "  Check your key at $ESC[36mhttps://platform.comfy.org/profile/api-keys$ESC[0m"
-            exit 1
+
+            Write-Host "  Validating key..."
+            if (Test-ApiKey $apiKey) {
+                Write-Success "API key is valid"
+                break
+            } else {
+                $remaining = $maxAttempts - $attempt
+                if ($remaining -gt 0) {
+                    Write-Fail "Invalid or unauthorized API key. $remaining attempt(s) remaining."
+                    Write-Host ""
+                    continue
+                }
+                Write-Fail "Invalid or unauthorized API key."
+                Write-Host "  Check your key at $ESC[36mhttps://platform.comfy.org/profile/api-keys$ESC[0m"
+                exit 1
+            }
         }
     }
 
@@ -301,11 +277,11 @@ function Main {
         Write-Host "    $ESC[2m2$ESC[0m) This project only (local scope)"
         $scopeChoice = Read-Host "  Choice [1]"
         $scope = if ($scopeChoice -eq "2") { "local" } else { "user" }
-        Install-ClaudeCode $apiKey $scope
+        Install-ClaudeCode $scope
     }
 
     if ($hasClaudeDesktop) {
-        Install-ClaudeDesktop $apiKey
+        Write-Info "Claude Desktop: added via the Connectors UI (steps below)."
     }
 
     if ($hasAmp) {
@@ -339,6 +315,28 @@ function Main {
             }
         } else {
             Write-Info "Skipped slash commands."
+        }
+    }
+
+    # Finish sign-in (OAuth clients)
+    if ($hasClaudeCode -or $hasClaudeDesktop) {
+        Write-Host ""
+        Write-Heading "Finish Sign-In"
+        Write-Host ""
+        Write-Host "  Comfy Cloud uses OAuth — sign in once per client (no API key needed):"
+        Write-Host ""
+        if ($hasClaudeCode) {
+            Write-Host "  $ESC[1mClaude Code$ESC[0m"
+            Write-Host "    Run $ESC[38;2;240;255;83m/mcp$ESC[0m -> select $ESC[1mcomfyui-cloud$ESC[0m -> $ESC[1mAuthenticate$ESC[0m."
+            Write-Host "    $ESC[2mYour browser opens to sign in. Tokens refresh automatically.$ESC[0m"
+            Write-Host ""
+        }
+        if ($hasClaudeDesktop) {
+            Write-Host "  $ESC[1mClaude Desktop$ESC[0m"
+            Write-Host "    Settings -> Connectors -> $ESC[1mAdd custom connector$ESC[0m"
+            Write-Host "    URL: $ESC[36m$MCP_URL$ESC[0m"
+            Write-Host "    $ESC[2mThen click Connect and sign in.$ESC[0m"
+            Write-Host ""
         }
     }
 

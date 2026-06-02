@@ -26,14 +26,14 @@ curl -fsSL https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main/inst
 irm https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main/install.ps1 | iex
 ```
 
-The installer detects your MCP client (Claude Code, Cursor, Amp), asks for your [Comfy API key](https://platform.comfy.org/profile/api-keys), and configures the remote MCP server. No Node.js required.
+The installer detects your MCP clients (Claude Code, Claude Desktop, Cursor, Amp) and configures the remote MCP server. Claude Code and Claude Desktop sign in with **OAuth** — a one-time browser sign-in (the installer prints the steps), no API key needed. Cursor and Amp still use an [API key](#get-an-api-key) for now. No Node.js required.
 
 **Requirements**
 - Active **Comfy Cloud subscription** (required to submit workflows)
-- **Comfy API key** (starts with `comfyui-`)
 - Your email enabled for the **closed beta** (see note above)
+- A **Comfy API key** (starts with `comfyui-`) — only for Cursor, Amp, or headless setups; Claude Code and Claude Desktop use OAuth
 
-> **Claude Desktop chat mode** needs OAuth, coming soon. Use **Code mode** in the meantime — it picks up the Claude Code config automatically.
+> **Claude Desktop:** added as a custom connector — **Settings → Connectors → Add custom connector**, paste `https://cloud.comfy.org/mcp`, then click **Connect** and sign in (OAuth). The installer prints these steps after running.
 
 ## Using it
 
@@ -75,6 +75,19 @@ This is a closed beta — please tell us what's working.
 - **Issues:** file in this repo
 
 Tool errors include a once-per-session pointer back to these channels so you don't have to remember them.
+
+## Get an API key
+
+Claude Code and Claude Desktop sign in via OAuth — no key required. You only need an API key for **Cursor and Amp** (until their OAuth support lands), or for **headless / CI** setups where no browser is available.
+
+1. Go to [platform.comfy.org/profile/api-keys](https://platform.comfy.org/profile/api-keys)
+2. Click **"New API Key"** and copy it (starts with `comfyui-`)
+
+To wire up Claude Code manually with a key (e.g. a server with no browser):
+
+```bash
+claude mcp add --transport http comfyui-cloud https://cloud.comfy.org/mcp -H "X-API-Key: comfyui-…"
+```
 
 ## Links
 

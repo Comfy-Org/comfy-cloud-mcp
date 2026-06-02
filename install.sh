@@ -161,20 +161,6 @@ except: pass
   return 1
 }
 
-# ── Configure Claude Desktop ──────────────────────────────────────────
-configure_claude_desktop() {
-  local api_key="$1"
-
-  # Claude Desktop chat mode requires OAuth for remote MCP servers via
-  # Settings > Connectors. OAuth support is coming soon. For now, users
-  # can use Code mode within the Desktop app (configured via Claude Code).
-  echo ""
-  warn "Claude Desktop (chat mode): OAuth support coming soon."
-  echo -e "  ${DIM}In the meantime, use ${BOLD}Code mode${RESET}${DIM} within Claude Desktop —${RESET}"
-  echo -e "  ${DIM}it connects to Comfy Cloud automatically via the Claude Code config.${RESET}"
-  echo ""
-}
-
 # ── Configure Cursor (JSON file) ───────────────────────────────────────
 configure_cursor() {
   local api_key="$1"
@@ -260,22 +246,24 @@ configure_amp() {
 
 # ── Configure Claude Code (CLI) ────────────────────────────────────────
 configure_claude_code() {
-  local api_key="$1"
-  local scope="$2"
+  local scope="$1"
 
-  # Remove existing from both scopes to avoid shadowing
+  # Remove existing from both scopes to avoid shadowing. This also clears any
+  # stale X-API-Key header from a previous install — Claude Code treats a
+  # rejected header as a hard failure and will NOT fall back to OAuth, so the
+  # OAuth path requires genuinely no header.
   claude mcp remove comfyui-cloud -s user &>/dev/null || true
   claude mcp remove comfyui-cloud -s local &>/dev/null || true
 
+  # No -H header → Claude Code runs the MCP OAuth flow on first connect.
   claude mcp add \
     --transport http \
     -s "$scope" \
     comfyui-cloud \
-    "$MCP_URL" \
-    -H "X-API-Key: $api_key" &>/dev/null
+    "$MCP_URL" &>/dev/null
 
   if [[ $? -eq 0 ]]; then
-    success "Claude Code configured ${DIM}($scope scope)${RESET}"
+    success "Claude Code configured ${DIM}($scope scope, OAuth)${RESET}"
     return 0
   else
     fail "Claude Code: claude mcp add failed"
@@ -365,21 +353,6 @@ main() {
     exit 1
   fi
 
-  # Claude Desktop chat mode doesn't support API key auth yet (OAuth coming soon).
-  # If it's the only client, let the user know they need Claude Code.
-  if ! $has_claude_code && ! $has_cursor && ! $has_amp && $has_claude_desktop; then
-    echo ""
-    warn "Claude Desktop chat mode requires OAuth (coming soon)."
-    echo ""
-    echo -e "  Install ${BOLD}Claude Code${RESET} to use Comfy Cloud MCP today:"
-    echo -e "  ${CYAN}https://docs.anthropic.com/en/docs/claude-code${RESET}"
-    echo ""
-    echo -e "  ${DIM}Claude Code works as a standalone CLI and inside the Claude Desktop app.${RESET}"
-    echo -e "  ${DIM}Also supported: Cursor, Amp.${RESET}"
-    echo ""
-    exit 0
-  fi
-
   # Check for existing installation
   echo ""
   echo -en "  ${DIM}Checking for existing config...${RESET}"
@@ -398,64 +371,68 @@ main() {
     echo -e "\r\033[K"
   fi
 
-  # Get API key
-  echo ""
-  heading "API Key"
-  echo ""
-  echo -e "  Get one at: ${CYAN}https://platform.comfy.org/profile/api-keys${RESET}"
-  echo -e "  Click ${COMFY_YELLOW}\"New API Key\"${RESET} and copy it."
-  echo ""
-
+  # API key is only needed for clients still on the header path (Cursor, Amp).
+  # Claude Code and Claude Desktop use OAuth and need no key.
   local api_key=""
-  local max_attempts=3
+  if $has_cursor || $has_amp; then
+    echo ""
+    heading "API Key"
+    echo ""
+    echo -e "  ${DIM}Cursor and Amp don't support OAuth yet — they need an API key.${RESET}"
+    echo -e "  Get one at: ${CYAN}https://platform.comfy.org/profile/api-keys${RESET}"
+    echo -e "  Click ${COMFY_YELLOW}\"New API Key\"${RESET} and copy it."
+    echo ""
 
-  for attempt in $(seq 1 $max_attempts); do
-    api_key=$(read_api_key)
+    local max_attempts=3
 
-    if [[ -z "$api_key" ]]; then
-      local remaining=$((max_attempts - attempt))
-      if [[ $remaining -gt 0 ]]; then
-        warn "No key entered. $remaining attempt(s) remaining. (Ctrl+C to quit)"
-        echo ""
-        continue
-      fi
-      fail "No key entered."
-      exit 1
-    fi
+    for attempt in $(seq 1 $max_attempts); do
+      api_key=$(read_api_key)
 
-    if [[ "$api_key" != comfyui-* ]]; then
-      warn "Key doesn't start with \"comfyui-\". Are you sure it's correct?"
-      echo -en "  Continue anyway? (y/N): "
-      read -r cont < /dev/tty
-      if [[ "$(echo "$cont" | tr '[:upper:]' '[:lower:]')" != "y" ]]; then
-        if [[ $attempt -lt $max_attempts ]]; then
+      if [[ -z "$api_key" ]]; then
+        local remaining=$((max_attempts - attempt))
+        if [[ $remaining -gt 0 ]]; then
+          warn "No key entered. $remaining attempt(s) remaining. (Ctrl+C to quit)"
           echo ""
           continue
         fi
+        fail "No key entered."
         exit 1
       fi
-    fi
 
-    echo -e "  Validating key..."
-    if validate_api_key "$api_key"; then
-      success "API key is valid"
-      break
-    else
-      local remaining=$((max_attempts - attempt))
-      local err_msg="Invalid or unauthorized API key."
-      if [[ -n "$VALIDATION_ERROR" ]]; then
-        err_msg="$VALIDATION_ERROR"
+      if [[ "$api_key" != comfyui-* ]]; then
+        warn "Key doesn't start with \"comfyui-\". Are you sure it's correct?"
+        echo -en "  Continue anyway? (y/N): "
+        read -r cont < /dev/tty
+        if [[ "$(echo "$cont" | tr '[:upper:]' '[:lower:]')" != "y" ]]; then
+          if [[ $attempt -lt $max_attempts ]]; then
+            echo ""
+            continue
+          fi
+          exit 1
+        fi
       fi
-      if [[ $remaining -gt 0 ]]; then
-        fail "$err_msg $remaining attempt(s) remaining."
-        echo ""
-        continue
+
+      echo -e "  Validating key..."
+      if validate_api_key "$api_key"; then
+        success "API key is valid"
+        break
+      else
+        local remaining=$((max_attempts - attempt))
+        local err_msg="Invalid or unauthorized API key."
+        if [[ -n "$VALIDATION_ERROR" ]]; then
+          err_msg="$VALIDATION_ERROR"
+        fi
+        if [[ $remaining -gt 0 ]]; then
+          fail "$err_msg $remaining attempt(s) remaining."
+          echo ""
+          continue
+        fi
+        fail "$err_msg"
+        echo -e "  Check your key at ${CYAN}https://platform.comfy.org/profile/api-keys${RESET}"
+        exit 1
       fi
-      fail "$err_msg"
-      echo -e "  Check your key at ${CYAN}https://platform.comfy.org/profile/api-keys${RESET}"
-      exit 1
-    fi
-  done
+    done
+  fi
 
   # Configure clients
   echo ""
@@ -471,11 +448,11 @@ main() {
     read -r scope_choice < /dev/tty
     local scope="user"
     [[ "$scope_choice" == "2" ]] && scope="local"
-    configure_claude_code "$api_key" "$scope" || true
+    configure_claude_code "$scope" || true
   fi
 
   if $has_claude_desktop; then
-    info "Claude Desktop (chat mode): OAuth support coming soon. Use Code mode for now."
+    info "Claude Desktop: added via the Connectors UI (steps below)."
   fi
 
   if $has_cursor; then
@@ -524,6 +501,28 @@ main() {
       done
     else
       info "Skipped slash commands."
+    fi
+  fi
+
+  # Finish sign-in (OAuth clients)
+  if $has_claude_code || $has_claude_desktop; then
+    echo ""
+    heading "Finish Sign-In"
+    echo ""
+    echo -e "  Comfy Cloud uses OAuth — sign in once per client (no API key needed):"
+    echo ""
+    if $has_claude_code; then
+      echo -e "  ${BOLD}Claude Code${RESET}"
+      echo -e "    Run ${COMFY_YELLOW}/mcp${RESET} → select ${BOLD}comfyui-cloud${RESET} → ${BOLD}Authenticate${RESET}."
+      echo -e "    ${DIM}Your browser opens to sign in. Tokens refresh automatically.${RESET}"
+      echo ""
+    fi
+    if $has_claude_desktop; then
+      echo -e "  ${BOLD}Claude Desktop${RESET}"
+      echo -e "    Settings → Connectors → ${BOLD}Add custom connector${RESET}"
+      echo -e "    URL: ${CYAN}${MCP_URL}${RESET}"
+      echo -e "    ${DIM}Then click Connect and sign in.${RESET}"
+      echo ""
     fi
   fi
 
