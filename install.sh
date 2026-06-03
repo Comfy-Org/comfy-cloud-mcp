@@ -8,7 +8,7 @@ MCP_URL="${MCP_URL:-https://cloud.comfy.org/mcp}"
 # Derive validation URL from MCP_URL base (strip /mcp path, add /api/queue)
 MCP_BASE="${MCP_URL%/mcp}"
 VALIDATION_URL="${VALIDATION_URL:-${MCP_BASE}/api/queue}"
-SKILLS_BASE_URL="https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main/skills"
+SKILLS_BASE_URL="${SKILLS_BASE_URL:-https://raw.githubusercontent.com/Comfy-Org/comfy-skills/main/skills}"
 REPO_URL="https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main"
 
 # ── Colors ──────────────────────────────────────────────────────────────
@@ -278,11 +278,16 @@ install_skills() {
 
   local skills=(
     "comfy-generate-image.md"
-    "comfy-help.md"
-    "comfy-rickroll.md"
+    "comfy-generate-video.md"
+    "comfy-generate-audio.md"
+    "comfy-generate-3d.md"
+    "comfy-remove-background.md"
+    "comfy-upscale-image.md"
     "comfy-search-models.md"
     "comfy-search-nodes.md"
     "comfy-search-templates.md"
+    "comfy-help.md"
+    "comfy-rickroll.md"
     "technique-combine-people.md"
   )
 
