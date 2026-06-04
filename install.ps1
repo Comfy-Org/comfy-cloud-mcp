@@ -4,8 +4,7 @@
 $ErrorActionPreference = "Stop"
 
 $MCP_URL = if ($env:MCP_URL) { $env:MCP_URL } else { "https://cloud.comfy.org/mcp" }
-$VALIDATION_URL = if ($env:VALIDATION_URL) { $env:VALIDATION_URL } else { "https://cloud.comfy.org/api/queue" }
-$SKILLS_BASE_URL = "https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main/skills"
+$SKILLS_BASE_URL = if ($env:SKILLS_BASE_URL) { $env:SKILLS_BASE_URL } else { "https://raw.githubusercontent.com/Comfy-Org/comfy-skills/main/skills" }
 
 # ── Colors ──────────────────────────────────────────────────────────────
 $ESC = [char]27
@@ -49,47 +48,6 @@ function Test-ClaudeDesktop {
     return (Test-Path $configDir)
 }
 
-function Test-Amp {
-    try { Get-Command amp -ErrorAction Stop | Out-Null; return $true }
-    catch { return $false }
-}
-
-function Get-AmpConfigPath {
-    if ($env:AMP_SETTINGS_FILE) { return $env:AMP_SETTINGS_FILE }
-    return Join-Path $env:APPDATA "amp\settings.json"
-}
-
-# ── API key handling ────────────────────────────────────────────────────
-function Read-ApiKey {
-    Write-Host -NoNewline "  Paste your API key: "
-    $key = ""
-    while ($true) {
-        $keyInfo = [Console]::ReadKey($true)
-        if ($keyInfo.Key -eq "Enter") { Write-Host ""; return $key }
-        if ($keyInfo.Key -eq "Backspace") {
-            if ($key.Length -gt 0) {
-                $key = $key.Substring(0, $key.Length - 1)
-                Write-Host -NoNewline "`b `b"
-            }
-        } else {
-            $key += $keyInfo.KeyChar
-            Write-Host -NoNewline "*"
-        }
-    }
-}
-
-function Test-ApiKey($key) {
-    try {
-        $response = Invoke-WebRequest -Uri $VALIDATION_URL -Headers @{"X-API-Key" = $key} -Method Get -UseBasicParsing -ErrorAction Stop
-        return $true
-    } catch {
-        $status = $_.Exception.Response.StatusCode.value__
-        if ($status -eq 401 -or $status -eq 403) { return $false }
-        # Can't reach API, let it through
-        return $true
-    }
-}
-
 # ── Configure Claude Code ──────────────────────────────────────────────
 # Claude Desktop has no config-file route to a remote OAuth connector — it's
 # added through the Connectors UI, which then runs the OAuth browser flow. We
@@ -111,53 +69,20 @@ function Install-ClaudeCode($scope) {
     }
 }
 
-# ── Configure Amp ──────────────────────────────────────────────────────
-# Amp's `mcp add` CLI auto-detects transport from the URL and has no flag
-# for HTTP headers — they live in settings.json under `amp.mcpServers`.
-# We write the entry directly so the X-API-Key header survives.
-function Install-Amp($apiKey) {
-    $configPath = Get-AmpConfigPath
-    $configDir = Split-Path $configPath
-
-    if (-not (Test-Path $configDir)) {
-        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
-    }
-
-    $config = @{}
-    if (Test-Path $configPath) {
-        try {
-            $loaded = Get-Content $configPath -Raw | ConvertFrom-Json -AsHashtable
-            if ($null -ne $loaded) { $config = $loaded }
-        } catch {
-            Write-Warn "Amp: existing settings.json is not valid JSON; leaving manual setup to user"
-            return
-        }
-    }
-
-    if (-not $config.ContainsKey("amp.mcpServers")) {
-        $config["amp.mcpServers"] = @{}
-    }
-
-    $config["amp.mcpServers"]["comfyui-cloud"] = @{
-        url = $MCP_URL
-        headers = @{
-            "X-API-Key" = $apiKey
-        }
-    }
-
-    $config | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
-    Write-Success "Amp configured $ESC[2m($configPath)$ESC[0m"
-}
-
 # ── Install slash commands ──────────────────────────────────────────────
 function Install-Skills($targetDir, $clientName) {
     $skills = @(
         "comfy-generate-image.md"
-        "comfy-help.md"
-        "comfy-rickroll.md"
+        "comfy-generate-video.md"
+        "comfy-generate-audio.md"
+        "comfy-generate-3d.md"
+        "comfy-remove-background.md"
+        "comfy-upscale-image.md"
         "comfy-search-models.md"
         "comfy-search-nodes.md"
         "comfy-search-templates.md"
+        "comfy-help.md"
+        "comfy-rickroll.md"
         "technique-combine-people.md"
     )
 
@@ -186,7 +111,6 @@ function Main {
 
     $hasClaudeCode = Test-ClaudeCode
     $hasClaudeDesktop = Test-ClaudeDesktop
-    $hasAmp = Test-Amp
 
     Write-Heading "Detecting Clients"
     Write-Host ""
@@ -197,73 +121,14 @@ function Main {
     if ($hasClaudeDesktop) { Write-Success "Claude Desktop" }
     else { Write-Info "Claude Desktop (not found)" }
 
-    if ($hasAmp) { Write-Success "Amp" }
-    else { Write-Info "Amp (not found)" }
-
-    if (-not $hasClaudeCode -and -not $hasClaudeDesktop -and -not $hasAmp) {
+    if (-not $hasClaudeCode -and -not $hasClaudeDesktop) {
         Write-Host ""
         Write-Fail "No supported MCP clients found."
         Write-Host ""
         Write-Info "Install Claude Code:    https://docs.anthropic.com/en/docs/claude-code"
         Write-Info "Install Claude Desktop: https://claude.ai/download"
-        Write-Info "Install Amp:            https://ampcode.com"
         Write-Host ""
         exit 1
-    }
-
-    # API key is only needed for clients still on the header path (Amp).
-    # Claude Code and Claude Desktop use OAuth and need no key.
-    $apiKey = ""
-    if ($hasAmp) {
-        Write-Host ""
-        Write-Heading "API Key"
-        Write-Host ""
-        Write-Host "  $ESC[2mAmp doesn't support OAuth yet — it needs an API key.$ESC[0m"
-        Write-Host "  Get one at: $ESC[36mhttps://platform.comfy.org/profile/api-keys$ESC[0m"
-        Write-Host "  Click $ESC[38;2;240;255;83m`"New API Key`"$ESC[0m and copy it."
-        Write-Host ""
-
-        $maxAttempts = 3
-
-        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-            $apiKey = Read-ApiKey
-
-            if ([string]::IsNullOrWhiteSpace($apiKey)) {
-                $remaining = $maxAttempts - $attempt
-                if ($remaining -gt 0) {
-                    Write-Warn "No key entered. $remaining attempt(s) remaining. (Ctrl+C to quit)"
-                    Write-Host ""
-                    continue
-                }
-                Write-Fail "No key entered."
-                exit 1
-            }
-
-            if (-not $apiKey.StartsWith("comfyui-")) {
-                Write-Warn "Key doesn't start with `"comfyui-`". Are you sure it's correct?"
-                $cont = Read-Host "  Continue anyway? (y/N)"
-                if ($cont.ToLower() -ne "y") {
-                    if ($attempt -lt $maxAttempts) { Write-Host ""; continue }
-                    exit 1
-                }
-            }
-
-            Write-Host "  Validating key..."
-            if (Test-ApiKey $apiKey) {
-                Write-Success "API key is valid"
-                break
-            } else {
-                $remaining = $maxAttempts - $attempt
-                if ($remaining -gt 0) {
-                    Write-Fail "Invalid or unauthorized API key. $remaining attempt(s) remaining."
-                    Write-Host ""
-                    continue
-                }
-                Write-Fail "Invalid or unauthorized API key."
-                Write-Host "  Check your key at $ESC[36mhttps://platform.comfy.org/profile/api-keys$ESC[0m"
-                exit 1
-            }
-        }
     }
 
     # Configure clients
@@ -282,10 +147,6 @@ function Main {
 
     if ($hasClaudeDesktop) {
         Write-Info "Claude Desktop: added via the Connectors UI (steps below)."
-    }
-
-    if ($hasAmp) {
-        Install-Amp $apiKey
     }
 
     # Slash commands
@@ -333,9 +194,9 @@ function Main {
         }
         if ($hasClaudeDesktop) {
             Write-Host "  $ESC[1mClaude Desktop$ESC[0m"
-            Write-Host "    Settings -> Connectors -> $ESC[1mAdd custom connector$ESC[0m"
-            Write-Host "    URL: $ESC[36m$MCP_URL$ESC[0m"
-            Write-Host "    $ESC[2mThen click Connect and sign in.$ESC[0m"
+            Write-Host "    Customize -> Connectors -> click $ESC[1m+$ESC[0m -> $ESC[1mAdd custom connector$ESC[0m"
+            Write-Host "    Name it anything; Remote MCP server URL: $ESC[36m$MCP_URL$ESC[0m"
+            Write-Host "    $ESC[2mClick Add, then sign in through Claude Desktop.$ESC[0m"
             Write-Host ""
         }
     }

@@ -6,7 +6,6 @@ set -euo pipefail
 
 MCP_URL="${MCP_URL:-https://cloud.comfy.org/mcp}"
 SKILLS_BASE_URL="${SKILLS_BASE_URL:-https://raw.githubusercontent.com/Comfy-Org/comfy-skills/main/skills}"
-REPO_URL="https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main"
 
 # ── Colors ──────────────────────────────────────────────────────────────
 RESET="\033[0m"
@@ -301,9 +300,9 @@ main() {
     fi
     if $has_claude_desktop; then
       echo -e "  ${BOLD}Claude Desktop${RESET}"
-      echo -e "    Settings → Connectors → ${BOLD}Add custom connector${RESET}"
-      echo -e "    URL: ${CYAN}${MCP_URL}${RESET}"
-      echo -e "    ${DIM}Then click Connect and sign in.${RESET}"
+      echo -e "    Customize → Connectors → click ${BOLD}+${RESET} → ${BOLD}Add custom connector${RESET}"
+      echo -e "    Name it anything; Remote MCP server URL: ${CYAN}${MCP_URL}${RESET}"
+      echo -e "    ${DIM}Click Add, then sign in through Claude Desktop.${RESET}"
       echo ""
     fi
   fi

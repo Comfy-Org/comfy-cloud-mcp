@@ -35,7 +35,7 @@ The installer detects Claude Code and Claude Desktop and configures the remote M
 - Your email enabled for the **closed beta** (see note above)
 - Claude Code and Claude Desktop sign in with **OAuth** — no API key needed (an [API key](#get-an-api-key) is only required for headless / CI setups with no browser)
 
-> **Claude Desktop:** added as a custom connector — **Settings → Connectors → Add custom connector**, paste `https://cloud.comfy.org/mcp`, then click **Connect** and sign in (OAuth). The installer prints these steps after running.
+> **Claude Desktop:** added as a custom connector — **Customize → Connectors → click + → Add custom connector**, name it anything, paste `https://cloud.comfy.org/mcp` as the Remote MCP server URL, then click **Add** and sign in (OAuth). The installer prints these steps after running.
 
 ## Using it
 
