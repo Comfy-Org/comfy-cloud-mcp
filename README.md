@@ -4,7 +4,7 @@
 
 <h1>Comfy Cloud MCP</h1>
 
-Connect your AI agent to [Comfy Cloud](https://cloud.comfy.org) — generate images, video, audio, and 3D, search models and nodes, and run ComfyUI workflows directly from Claude, Cursor, Amp, and other MCP-compatible clients.
+Connect your AI agent to [Comfy Cloud](https://cloud.comfy.org) — generate images, video, audio, and 3D, search models and nodes, and run ComfyUI workflows directly from Claude Code and Claude Desktop.
 
 </div>
 
@@ -26,12 +26,14 @@ curl -fsSL https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main/inst
 irm https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main/install.ps1 | iex
 ```
 
-The installer detects your MCP clients (Claude Code, Claude Desktop, Cursor, Amp) and configures the remote MCP server. Claude Code and Claude Desktop sign in with **OAuth** — a one-time browser sign-in (the installer prints the steps), no API key needed. Cursor and Amp still use an [API key](#get-an-api-key) for now. No Node.js required.
+The installer detects Claude Code and Claude Desktop and configures the remote MCP server. Both sign in with **OAuth** — a one-time browser sign-in (the installer prints the steps), no API key needed. No Node.js required.
+
+> Support is currently scoped to Claude Code and Claude Desktop while OAuth login stabilizes; other MCP clients (Cursor, Amp, etc.) will return as their OAuth support lands.
 
 **Requirements**
 - Active **Comfy Cloud subscription** (required to submit workflows)
 - Your email enabled for the **closed beta** (see note above)
-- A **Comfy API key** (starts with `comfyui-`) — only for Cursor, Amp, or headless setups; Claude Code and Claude Desktop use OAuth
+- Claude Code and Claude Desktop sign in with **OAuth** — no API key needed (an [API key](#get-an-api-key) is only required for headless / CI setups with no browser)
 
 > **Claude Desktop:** added as a custom connector — **Settings → Connectors → Add custom connector**, paste `https://cloud.comfy.org/mcp`, then click **Connect** and sign in (OAuth). The installer prints these steps after running.
 
@@ -78,7 +80,7 @@ Tool errors include a once-per-session pointer back to these channels so you don
 
 ## Get an API key
 
-Claude Code and Claude Desktop sign in via OAuth — no key required. You only need an API key for **Cursor and Amp** (until their OAuth support lands), or for **headless / CI** setups where no browser is available.
+Claude Code and Claude Desktop sign in via OAuth — no key required. You only need an API key for **headless / CI** setups where no browser is available.
 
 1. Go to [platform.comfy.org/profile/api-keys](https://platform.comfy.org/profile/api-keys)
 2. Click **"New API Key"** and copy it (starts with `comfyui-`)

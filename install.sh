@@ -5,9 +5,6 @@ set -euo pipefail
 # Usage: curl -fsSL https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main/install.sh | bash
 
 MCP_URL="${MCP_URL:-https://cloud.comfy.org/mcp}"
-# Derive validation URL from MCP_URL base (strip /mcp path, add /api/queue)
-MCP_BASE="${MCP_URL%/mcp}"
-VALIDATION_URL="${VALIDATION_URL:-${MCP_BASE}/api/queue}"
 SKILLS_BASE_URL="${SKILLS_BASE_URL:-https://raw.githubusercontent.com/Comfy-Org/comfy-skills/main/skills}"
 REPO_URL="https://raw.githubusercontent.com/Comfy-Org/comfy-cloud-mcp/main"
 
@@ -73,51 +70,6 @@ get_claude_desktop_config_path() {
   esac
 }
 
-detect_cursor() {
-  [[ -d "$HOME/.cursor" ]]
-}
-
-get_cursor_config_path() {
-  echo "$HOME/.cursor/mcp.json"
-}
-
-detect_amp() {
-  command -v amp &>/dev/null
-}
-
-# ── API key handling ────────────────────────────────────────────────────
-read_api_key() {
-  local key=""
-  echo -en "  Paste your API key: " >&2
-  read -r key < /dev/tty
-  echo "$key"
-}
-
-VALIDATION_ERROR=""
-
-validate_api_key() {
-  local key="$1"
-  VALIDATION_ERROR=""
-  local tmpfile
-  tmpfile=$(mktemp)
-  local status
-  status=$(curl -s -o "$tmpfile" -w "%{http_code}" -H "X-API-Key: $key" "$VALIDATION_URL" 2>/dev/null) || true
-  if [[ "$status" == "401" || "$status" == "403" ]]; then
-    # Try to extract the error message from the response body
-    VALIDATION_ERROR=$(python3 -c "
-import json, sys
-try:
-    d = json.load(open('$tmpfile'))
-    print(d.get('message', ''))
-except: pass
-" 2>/dev/null) || true
-    rm -f "$tmpfile"
-    return 1
-  fi
-  rm -f "$tmpfile"
-  return 0
-}
-
 # ── Check for existing installation ────────────────────────────────────
 check_existing() {
   local found=false
@@ -159,89 +111,6 @@ except: pass
     return 0
   fi
   return 1
-}
-
-# ── Configure Cursor (JSON file) ───────────────────────────────────────
-configure_cursor() {
-  local api_key="$1"
-  local config_path
-  config_path=$(get_cursor_config_path)
-
-  mkdir -p "$(dirname "$config_path")"
-
-  python3 -c "
-import json, os
-
-config_path = '$config_path'
-api_key = '$api_key'
-mcp_url = '$MCP_URL'
-
-config = {}
-if os.path.exists(config_path):
-    with open(config_path) as f:
-        config = json.load(f)
-
-if 'mcpServers' not in config:
-    config['mcpServers'] = {}
-
-config['mcpServers']['comfyui-cloud'] = {
-    'type': 'url',
-    'url': mcp_url,
-    'headers': {
-        'X-API-Key': api_key
-    }
-}
-
-with open(config_path, 'w') as f:
-    json.dump(config, f, indent=2)
-    f.write('\n')
-" 2>/dev/null
-
-  if [[ $? -eq 0 ]]; then
-    success "Cursor configured ${DIM}($config_path)${RESET}"
-    return 0
-  else
-    fail "Cursor: could not write config"
-    return 1
-  fi
-}
-
-# ── Configure Amp ──────────────────────────────────────────────────────
-# Amp's `mcp add` CLI auto-detects transport from the URL and has no flag
-# for HTTP headers — they live in settings.json under `amp.mcpServers`.
-# We write the entry directly so the X-API-Key header survives.
-configure_amp() {
-  local api_key="$1"
-  local config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/amp"
-  local config_file="$config_dir/settings.json"
-
-  if ! command -v jq &>/dev/null; then
-    warn "Amp: \`jq\` is required to write settings.json. Install jq and re-run, or set up manually."
-    return 1
-  fi
-
-  if ! mkdir -p "$config_dir" 2>/dev/null; then
-    warn "Amp: failed to create $config_dir"
-    return 1
-  fi
-
-  if [[ ! -s "$config_file" ]]; then
-    echo '{}' >"$config_file"
-  fi
-
-  local jq_output
-  if jq_output=$(jq \
-    --arg url "$MCP_URL" \
-    --arg key "$api_key" \
-    '.["amp.mcpServers"]["comfyui-cloud"] = {url: $url, headers: {"X-API-Key": $key}}' \
-    "$config_file" 2>&1); then
-    printf '%s\n' "$jq_output" >"$config_file"
-    success "Amp configured ${DIM}($config_file)${RESET}"
-    return 0
-  else
-    warn "Amp: failed to update $config_file: $jq_output"
-    return 1
-  fi
 }
 
 # ── Configure Claude Code (CLI) ────────────────────────────────────────
@@ -313,8 +182,6 @@ main() {
   # Detect available clients
   local has_claude_code=false
   local has_claude_desktop=false
-  local has_cursor=false
-  local has_amp=false
 
   heading "Detecting Clients"
   echo ""
@@ -333,27 +200,12 @@ main() {
     info "Claude Desktop (not found)"
   fi
 
-  if detect_cursor; then
-    has_cursor=true
-    success "Cursor"
-  else
-    info "Cursor (not found)"
-  fi
-
-  if detect_amp; then
-    has_amp=true
-    success "Amp"
-  else
-    info "Amp (not found)"
-  fi
-
-  if ! $has_claude_code && ! $has_claude_desktop && ! $has_cursor && ! $has_amp; then
+  if ! $has_claude_code && ! $has_claude_desktop; then
     echo ""
     fail "No supported MCP clients found."
     echo ""
     info "Install Claude Code:    https://docs.anthropic.com/en/docs/claude-code"
     info "Install Claude Desktop: https://claude.ai/download"
-    info "Install Cursor:         https://cursor.com"
     echo ""
     exit 1
   fi
@@ -374,69 +226,6 @@ main() {
     fi
   else
     echo -e "\r\033[K"
-  fi
-
-  # API key is only needed for clients still on the header path (Cursor, Amp).
-  # Claude Code and Claude Desktop use OAuth and need no key.
-  local api_key=""
-  if $has_cursor || $has_amp; then
-    echo ""
-    heading "API Key"
-    echo ""
-    echo -e "  ${DIM}Cursor and Amp don't support OAuth yet — they need an API key.${RESET}"
-    echo -e "  Get one at: ${CYAN}https://platform.comfy.org/profile/api-keys${RESET}"
-    echo -e "  Click ${COMFY_YELLOW}\"New API Key\"${RESET} and copy it."
-    echo ""
-
-    local max_attempts=3
-
-    for attempt in $(seq 1 $max_attempts); do
-      api_key=$(read_api_key)
-
-      if [[ -z "$api_key" ]]; then
-        local remaining=$((max_attempts - attempt))
-        if [[ $remaining -gt 0 ]]; then
-          warn "No key entered. $remaining attempt(s) remaining. (Ctrl+C to quit)"
-          echo ""
-          continue
-        fi
-        fail "No key entered."
-        exit 1
-      fi
-
-      if [[ "$api_key" != comfyui-* ]]; then
-        warn "Key doesn't start with \"comfyui-\". Are you sure it's correct?"
-        echo -en "  Continue anyway? (y/N): "
-        read -r cont < /dev/tty
-        if [[ "$(echo "$cont" | tr '[:upper:]' '[:lower:]')" != "y" ]]; then
-          if [[ $attempt -lt $max_attempts ]]; then
-            echo ""
-            continue
-          fi
-          exit 1
-        fi
-      fi
-
-      echo -e "  Validating key..."
-      if validate_api_key "$api_key"; then
-        success "API key is valid"
-        break
-      else
-        local remaining=$((max_attempts - attempt))
-        local err_msg="Invalid or unauthorized API key."
-        if [[ -n "$VALIDATION_ERROR" ]]; then
-          err_msg="$VALIDATION_ERROR"
-        fi
-        if [[ $remaining -gt 0 ]]; then
-          fail "$err_msg $remaining attempt(s) remaining."
-          echo ""
-          continue
-        fi
-        fail "$err_msg"
-        echo -e "  Check your key at ${CYAN}https://platform.comfy.org/profile/api-keys${RESET}"
-        exit 1
-      fi
-    done
   fi
 
   # Configure clients
@@ -460,14 +249,6 @@ main() {
     info "Claude Desktop: added via the Connectors UI (steps below)."
   fi
 
-  if $has_cursor; then
-    configure_cursor "$api_key" || true
-  fi
-
-  if $has_amp; then
-    configure_amp "$api_key" || true
-  fi
-
   # Slash commands
   local skills_installed=false
   local skill_dirs=()
@@ -476,10 +257,6 @@ main() {
   # includes Code mode that reads from ~/.claude/commands/)
   if $has_claude_code || $has_claude_desktop; then
     skill_dirs+=("$HOME/.claude/commands:Claude Code")
-  fi
-
-  if $has_cursor; then
-    skill_dirs+=("$HOME/.cursor/commands:Cursor")
   fi
 
   if [[ ${#skill_dirs[@]} -gt 0 ]]; then
