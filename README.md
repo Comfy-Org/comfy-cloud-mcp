@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.svg" alt="ComfyUI Cloud" width="200"/>
+<img src="assets/Comfy%20MCP%20Logo.png" alt="ComfyUI Cloud" width="200"/>
 
 <h1>Comfy Cloud MCP</h1>
 
