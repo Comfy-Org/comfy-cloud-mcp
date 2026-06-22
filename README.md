@@ -10,7 +10,7 @@
 > **This installer is deprecated.**
 > Setup for the Comfy Cloud MCP server has moved to the docs:
 >
-> ### 👉 [Connect Claude to Comfy Cloud — docs.comfy.org/cloud/mcp](https://docs.comfy.org/cloud/mcp)
+> ### 👉 [Connect Claude to Comfy Cloud — docs.comfy.org/development/cloud/mcp-server](https://docs.comfy.org/development/cloud/mcp-server)
 
 You no longer need this installer to connect. The MCP server is hosted at `https://cloud.comfy.org/mcp` and signs in with OAuth, so setup is now a single command in **Claude Code** or a few clicks in **Claude Desktop** — both documented at the link above.
 
